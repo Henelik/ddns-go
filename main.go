@@ -49,23 +49,25 @@ func main() {
 		config.DomainName,
 		config.DDNSPassword)
 
-	select {
-	case <-ticker.C:
-		resp, err := http.Get(url)
-		if err != nil {
-			logger.Error("failed to send DNS update request", zap.Error(err))
+	for {
+		select {
+		case <-ticker.C:
+			resp, err := http.Get(url)
+			if err != nil {
+				logger.Error("failed to send DNS update request", zap.Error(err))
+			}
+
+			if resp.StatusCode >= 400 {
+				body, _ := ioutil.ReadAll(resp.Body)
+
+				logger.Error("got error response from DNS server",
+					zap.Int("status_code", resp.StatusCode),
+					zap.String("status", resp.Status),
+					zap.ByteString("response_body", body))
+			}
+
+			logger.Info("successfully updated DNS entry")
 		}
-
-		if resp.StatusCode >= 400 {
-			body, _ := ioutil.ReadAll(resp.Body)
-
-			logger.Error("got error response from DNS server",
-				zap.Int("status_code", resp.StatusCode),
-				zap.String("status", resp.Status),
-				zap.ByteString("response_body", body))
-		}
-
-		logger.Info("successfully updated DNS entry")
 	}
 }
 
