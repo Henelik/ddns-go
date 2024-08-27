@@ -3,17 +3,20 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
-	"io/ioutil"
-	"net/http"
-	"os"
-	"time"
 )
 
 func main() {
-	configPathPtr := flag.String("config", "/etc/ddns-go.yaml", "Path to the ddns-go config")
+	configPathPtr := flag.String("config", "ddns-go.yaml", "Path to the ddns-go config")
 
 	flag.Parse()
 
@@ -49,24 +52,39 @@ func main() {
 		config.DomainName,
 		config.DDNSPassword)
 
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
+
 	for {
 		select {
 		case <-ticker.C:
 			resp, err := http.Get(url)
 			if err != nil {
 				logger.Error("failed to send DNS update request", zap.Error(err))
+
+				continue
 			}
 
 			if resp.StatusCode >= 400 {
-				body, _ := ioutil.ReadAll(resp.Body)
+				body, readErr := io.ReadAll(resp.Body)
+				if readErr != nil {
+					logger.Error("failed to read response body", zap.Error(readErr))
+				}
 
 				logger.Error("got error response from DNS server",
 					zap.Int("status_code", resp.StatusCode),
 					zap.String("status", resp.Status),
 					zap.ByteString("response_body", body))
+
+				continue
 			}
 
 			logger.Info("successfully updated DNS entry")
+
+		case <-signalChannel:
+			logger.Info("shutting down")
+			ticker.Stop()
+			os.Exit(0)
 		}
 	}
 }
