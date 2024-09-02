@@ -79,7 +79,9 @@ func main() {
 				continue
 			}
 
-			logger.Info("successfully updated DNS entry")
+			logger.Info("successfully updated DNS entry",
+				zap.String("status", resp.Status),
+			)
 
 		case <-signalChannel:
 			logger.Info("shutting down")
